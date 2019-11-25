@@ -10,29 +10,29 @@
 #define YCSB_C_CLIENT_H_
 
 #include <string>
-#include "db.h"
 #include "core_workload.h"
+#include "db.h"
 #include "utils.h"
 
 namespace ycsbc {
 
 class Client {
  public:
-  Client(DB &db, CoreWorkload &wl) : db_(db), workload_(wl) { }
-  
+  Client(DB &db, CoreWorkload &wl) : db_(db), workload_(wl) {}
+
   virtual bool DoInsert();
   virtual bool DoTransaction();
-  
-  virtual ~Client() { }
-  
+
+  virtual ~Client() {}
+
  protected:
-  
   virtual int TransactionRead();
   virtual int TransactionReadModifyWrite();
   virtual int TransactionScan();
   virtual int TransactionUpdate();
   virtual int TransactionInsert();
-  
+  virtual int TransactionMultiRead();
+
   DB &db_;
   CoreWorkload &workload_;
 };
@@ -61,6 +61,9 @@ inline bool Client::DoTransaction() {
       break;
     case READMODIFYWRITE:
       status = TransactionReadModifyWrite();
+      break;
+    case MULTIREAD:
+      status = TransactionMultiRead();
       break;
     default:
       throw utils::Exception("Operation request is not recognized!");
@@ -136,8 +139,25 @@ inline int Client::TransactionInsert() {
   std::vector<DB::KVPair> values;
   workload_.BuildValues(values);
   return db_.Insert(table, key, values);
-} 
+}
 
-} // ycsbc
+inline int Client::TransactionMultiRead() {
+  const std::string &table = workload_.NextTable();
+  int len = workload_.NextScanLength();
+  std::vector<std::string> keys;
+  for (int i = 0; i < len; i++) {
+    keys.push_back(workload_.NextTransactionKey());
+  }
+  std::vector<std::vector<DB::KVPair>> results;
+  if (!workload_.read_all_fields()) {
+    std::vector<std::string> fields;
+    fields.push_back("field" + workload_.NextFieldName());
+    return db_.MultiRead(table, keys, &fields, results);
+  } else {
+    return db_.MultiRead(table, keys, NULL, results);
+  }
+}
 
-#endif // YCSB_C_CLIENT_H_
+}  // ycsbc
+
+#endif  // YCSB_C_CLIENT_H_

@@ -11,16 +11,19 @@
 #include <string>
 #include "db/basic_db.h"
 #include "db/lock_stl_db.h"
+#include "db/mega_db.h"
 
 using namespace std;
 using ycsbc::DB;
 using ycsbc::DBFactory;
 
-DB* DBFactory::CreateDB(utils::Properties &props) {
+DB* DBFactory::CreateDB(utils::Properties& props) {
   if (props["dbname"] == "basic") {
     return new BasicDB;
   } else if (props["dbname"] == "lock_stl") {
     return new LockStlDB;
-  } else return NULL;
+  } else if (props["dbname"] == "megakv") {
+    return new MegaDB;
+  } else
+    return NULL;
 }
-

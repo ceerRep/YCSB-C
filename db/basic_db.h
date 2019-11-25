@@ -12,8 +12,8 @@
 #include "core/db.h"
 
 #include <iostream>
-#include <string>
 #include <mutex>
+#include <string>
 #include "core/properties.h"
 
 using std::cout;
@@ -40,13 +40,13 @@ class BasicDB : public DB {
       }
       cout << ']' << endl;
     } else {
-      cout  << " < all fields >" << endl;
+      cout << " < all fields >" << endl;
     }
     return 0;
   }
 
-  int Scan(const std::string &table, const std::string &key,
-           int len, const std::vector<std::string> *fields,
+  int Scan(const std::string &table, const std::string &key, int len,
+           const std::vector<std::string> *fields,
            std::vector<std::vector<KVPair>> &result) {
     std::lock_guard<std::mutex> lock(mutex_);
     cout << "SCAN " << table << ' ' << key << " " << len;
@@ -57,7 +57,29 @@ class BasicDB : public DB {
       }
       cout << ']' << endl;
     } else {
-      cout  << " < all fields >" << endl;
+      cout << " < all fields >" << endl;
+    }
+    return 0;
+  }
+
+  int MultiRead(const std::string &table, const std::vector<std::string> &keys,
+                const std::vector<std::string> *fields,
+                std::vector<std::vector<KVPair>> &result) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    cout << "MultiGet " << table << ' ';
+    cout << "keys:\t[ ";
+    for (auto &key : keys) {
+      cout << key << ' ';
+    }
+    cout << "]" << endl;
+    if (fields) {
+      cout << "fields:\t[ ";
+      // for (auto f : *fields) {
+      //   cout << f << ' ';
+      // }
+      cout << ']' << endl;
+    } else {
+      cout << " < all fields >" << endl;
     }
     return 0;
   }
@@ -87,14 +109,13 @@ class BasicDB : public DB {
   int Delete(const std::string &table, const std::string &key) {
     std::lock_guard<std::mutex> lock(mutex_);
     cout << "DELETE " << table << ' ' << key << endl;
-    return 0; 
+    return 0;
   }
 
  private:
   std::mutex mutex_;
 };
 
-} // ycsbc
+}  // namespace ycsbc
 
-#endif // YCSB_C_BASIC_DB_H_
-
+#endif  // YCSB_C_BASIC_DB_H_

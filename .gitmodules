@@ -1,0 +1,3 @@
+[submodule "megakv"]
+	path = megakv
+	url = https://github.com/Eagoes/gpukv.git
