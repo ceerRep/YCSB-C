@@ -22,15 +22,7 @@ namespace ycsbc {
 
 class MegaDB : public DB {
  public:
-  MegaDB() {
-    std::cout << "====================================== MegaKV Init "
-                 "======================================"
-              << std::endl;
-    megakv = new mega::MegaKV();
-    std::cout << "====================================== MegaKV Init Finish"
-                 "======================================"
-              << std::endl;
-  }
+  MegaDB() { megakv = new mega::MegaKV(); }
   MegaDB(const MegaDB &) = delete;
   MegaDB(MegaDB &&) = delete;
   ~MegaDB() { delete megakv; }
@@ -83,7 +75,6 @@ class MegaDB : public DB {
                 std::vector<std::vector<KVPair>> &result) {
     result.clear();
     const std::vector<std::string> &values = megakv->MultiGet(key);
-    assert(key.size() == values.size());
     for (int i = 0; i < key.size(); i++) {
       std::vector<KVPair> key_value_vector;
       key_value_vector.push_back(std::make_pair(key.at(i), values.at(i)));
