@@ -66,7 +66,7 @@ const string CoreWorkload::MAX_SCAN_LENGTH_DEFAULT = "50";
 
 const string CoreWorkload::SCAN_LENGTH_DISTRIBUTION_PROPERTY =
     "scanlengthdistribution";
-const string CoreWorkload::SCAN_LENGTH_DISTRIBUTION_DEFAULT = "static";
+const string CoreWorkload::SCAN_LENGTH_DISTRIBUTION_DEFAULT = "const";
 
 const string CoreWorkload::INSERT_ORDER_PROPERTY = "insertorder";
 const string CoreWorkload::INSERT_ORDER_DEFAULT = "hashed";

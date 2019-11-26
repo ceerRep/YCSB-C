@@ -36,6 +36,7 @@ int DelegateClient(ycsbc::DB *db, ycsbc::CoreWorkload *wl, const int num_ops,
     }
   }
   db->Close();
+  cout << "DelegateClient Finish in thread " << this_thread::get_id() << endl;
   return oks;
 }
 
