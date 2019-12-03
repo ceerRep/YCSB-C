@@ -146,6 +146,7 @@ class CoreWorkload {
   virtual std::string NextTable() { return table_name_; }
   virtual std::string NextSequenceKey();     /// Used for loading data
   virtual std::string NextTransactionKey();  /// Used for transactions
+  virtual std::vector<std::string> NextTransactionMultiKey(int len);
   virtual Operation NextOperation() { return op_chooser_.Next(); }
   virtual std::string NextFieldName();
   virtual size_t NextScanLength() { return scan_len_chooser_->Next(); }
@@ -202,6 +203,14 @@ inline std::string CoreWorkload::NextTransactionKey() {
   uint64_t key_num;
   key_num = key_chooser_->Next();
   return BuildKeyName(key_num);
+}
+
+inline std::vector<std::string> CoreWorkload::NextTransactionMultiKey(int len) {
+  uint64_t key_num;
+  std::vector<std::string> keys;
+  key_num = key_chooser_->Next();
+  for (int i = 0; i < len; i++) keys.push_back(BuildKeyName(key_num + i));
+  return keys;
 }
 
 inline std::string CoreWorkload::BuildKeyName(uint64_t key_num) {

@@ -144,10 +144,7 @@ inline int Client::TransactionInsert() {
 inline int Client::TransactionMultiRead() {
   const std::string &table = workload_.NextTable();
   int len = workload_.NextScanLength();
-  std::vector<std::string> keys;
-  for (int i = 0; i < len; i++) {
-    keys.push_back(workload_.NextTransactionKey());
-  }
+  const std::vector<std::string> &keys = workload_.NextTransactionMultiKey(len);
   std::vector<std::vector<DB::KVPair>> results;
   if (!workload_.read_all_fields()) {
     std::vector<std::string> fields;
@@ -158,6 +155,6 @@ inline int Client::TransactionMultiRead() {
   }
 }
 
-}  // ycsbc
+}  // namespace ycsbc
 
 #endif  // YCSB_C_CLIENT_H_
