@@ -3,21 +3,20 @@ cmake_minimum_required(VERSION 2.8)
 
 find_package(Threads REQUIRED)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 
 include_directories(
     ${CMAKE_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/megakv/include
 )
 
-add_subdirectory(megakv)
-add_subdirectory(core)
-add_subdirectory(db)
+set (SOURCE
+    core/core_workload.cc
+    ycsbc.cc)
 
-set(EXTRA_LIBS ${EXTRA_LIBS} LibCore)
-set(EXTRA_LIBS ${EXTRA_LIBS} LibDB)
-set(EXTRA_LIBS ${EXTRA_LIBS} ${CMAKE_THREAD_LIBS_INIT})
-set(EXTRA_LIBS ${EXTRA_LIBS} libmegakv)
+add_library(ycsb ${SOURCE})
+target_link_libraries(ycsb ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(ycsbc ycsbc.cc)
-target_link_libraries(ycsbc ${EXTRA_LIBS})
+if (YCSB_TEST)
+    add_executable(basic_test ycsbc_test.cc)
+    target_link_libraries(basic_test ycsb ${CMAKE_THREAD_LIBS_INIT})
+endif (YCSB_TEST)
