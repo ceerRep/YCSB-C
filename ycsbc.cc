@@ -38,7 +38,7 @@ int DelegateClient(ycsbc::DB *db, ycsbc::CoreWorkload *wl, const int num_ops,
     }
   }
   db->Close();
-  cout << "DelegateClient Finish in thread " << this_thread::get_id() << endl;
+  // cout << "DelegateClient Finish in thread " << this_thread::get_id() << endl;
   return oks;
 }
 
@@ -173,8 +173,8 @@ void RunBench(int argc, const char *argv[], DB *db) {
     sum += n.get();
   }
   double duration = timer.End();
-  cerr << "# Transaction throughput (KTPS)" << endl;
-  cerr << file_name << '\t' << num_threads << '\t';
-  cerr << total_ops / duration / 1000 << endl;
+  cout << "# Transaction throughput (KTPS)" << endl;
+  cout << file_name << '\t' << num_threads << '\t';
+  cout << total_ops / duration / 1000 << endl;
 }
 }  // namespace ycsbc
