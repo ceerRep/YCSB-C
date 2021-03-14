@@ -38,7 +38,8 @@ int DelegateClient(ycsbc::DB *db, ycsbc::CoreWorkload *wl, const int num_ops,
     }
   }
   db->Close();
-  // cout << "DelegateClient Finish in thread " << this_thread::get_id() << endl;
+  // cout << "DelegateClient Finish in thread " << this_thread::get_id() <<
+  // endl;
   return oks;
 }
 
@@ -95,6 +96,25 @@ string ParseCommandLine(int argc, const char *argv[],
       }
       input.close();
       argindex++;
+    } else if (strcmp(argv[argindex], "--no-init") == 0) {
+      props.SetProperty("init_data", "0");
+      argindex++;
+    } else if (strcmp(argv[argindex], "-records") == 0) {
+      argindex++;
+      if (argindex >= argc) {
+        UsageMessage(argv[0]);
+        exit(0);
+      }
+      props.SetProperty("recordcount", argv[argindex]);
+      argindex++;
+    } else if (strcmp(argv[argindex], "-operations") == 0) {
+      argindex++;
+      if (argindex >= argc) {
+        UsageMessage(argv[0]);
+        exit(0);
+      }
+      props.SetProperty("operationcount", argv[argindex]);
+      argindex++;
     } else {
       cout << "Unknown option '" << argv[argindex] << "'" << endl;
       exit(0);
@@ -119,6 +139,9 @@ void UsageMessage(const char *command) {
   cout << "                   be specified, and will be processed in the order "
           "specified"
        << endl;
+  cout << "   -records record_counts: amount of data to be initialized" << endl;
+  cout << "   -operations operation_counts: amount of operations to be performed" << endl;
+  cout << "   --no-init: bypass the initialization of data" << endl;
 }
 
 inline bool StrStartWith(const char *str, const char *pre) {
@@ -128,30 +151,34 @@ inline bool StrStartWith(const char *str, const char *pre) {
 void RunBench(int argc, const char *argv[], DB *db) {
   utils::Properties props;
   string file_name = ParseCommandLine(argc, argv, props);
+  vector<future<int>> actual_ops;
+  int total_ops = stoi(props[ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY]);
+  int sum = 0;
 
   ycsbc::CoreWorkload wl;
   wl.Init(props);
 
   const int num_threads = stoi(props.GetProperty("threadcount", "1"));
 
-  // Loads data
-  std::cout << "=============================== Load Data "
-               "==============================="
-            << std::endl;
-  vector<future<int>> actual_ops;
-  int total_ops = stoi(props[ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY]);
-  for (int i = 0; i < num_threads; ++i) {
-    actual_ops.emplace_back(async(launch::async, DelegateClient, db, &wl,
-                                  total_ops / num_threads, true));
-  }
-  assert((int)actual_ops.size() == num_threads);
+  const bool init_data = stoi(props.GetProperty("init_data", "1"));
 
-  int sum = 0;
-  for (auto &n : actual_ops) {
-    assert(n.valid());
-    sum += n.get();
+  if (init_data) {  // Loads data
+    std::cout << "=============================== Load Data "
+                 "==============================="
+              << std::endl;
+
+    for (int i = 0; i < num_threads; ++i) {
+      actual_ops.emplace_back(async(launch::async, DelegateClient, db, &wl,
+                                    total_ops / num_threads, true));
+    }
+    assert((int)actual_ops.size() == num_threads);
+
+    for (auto &n : actual_ops) {
+      assert(n.valid());
+      sum += n.get();
+    }
+    cerr << "# Loading records:\t" << sum << endl;
   }
-  cerr << "# Loading records:\t" << sum << endl;
 
   // Peforms transactions
   std::cout << "=============================== Perform Transanction "
