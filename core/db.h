@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 
+#include <seastar/core/future.hh>
+
 namespace ycsbc {
 
 class DB {
@@ -42,7 +44,7 @@ class DB {
   /// @param result A vector of field/value pairs for the result.
   /// @return Zero on success, or a non-zero error code on error/record-miss.
   ///
-  virtual int Read(const std::string &table, const std::string &key,
+  virtual seastar::future<int> Read(const std::string &table, const std::string &key,
                    const std::vector<std::string> *fields,
                    std::vector<KVPair> &result) = 0;
   ///
@@ -56,7 +58,7 @@ class DB {
   ///        pairs for one record
   /// @return Zero on success, or a non-zero error code on error/record-miss.
   ///
-  virtual int MultiRead(const std::string &table,
+  virtual seastar::future<int> MultiRead(const std::string &table,
                         const std::vector<std::string> &key,
                         const std::vector<std::string> *fields,
                         std::vector<std::vector<KVPair>> &result) = 0;
@@ -72,7 +74,7 @@ class DB {
   ///        pairs for one record
   /// @return Zero on success, or a non-zero error code on error.
   ///
-  virtual int Scan(const std::string &table, const std::string &key,
+  virtual seastar::future<int> Scan(const std::string &table, const std::string &key,
                    int record_count, const std::vector<std::string> *fields,
                    std::vector<std::vector<KVPair>> &result) = 0;
   ///
@@ -85,7 +87,7 @@ class DB {
   /// @param values A vector of field/value pairs to update in the record.
   /// @return Zero on success, a non-zero error code on error.
   ///
-  virtual int Update(const std::string &table, const std::string &key,
+  virtual seastar::future<int> Update(const std::string &table, const std::string &key,
                      std::vector<KVPair> &values) = 0;
   ///
   /// Inserts a record into the database.
@@ -96,7 +98,7 @@ class DB {
   /// @param values A vector of field/value pairs to insert in the record.
   /// @return Zero on success, a non-zero error code on error.
   ///
-  virtual int Insert(const std::string &table, const std::string &key,
+  virtual seastar::future<int> Insert(const std::string &table, const std::string &key,
                      std::vector<KVPair> &values) = 0;
   ///
   /// Deletes a record from the database.
@@ -105,7 +107,7 @@ class DB {
   /// @param key The key of the record to delete.
   /// @return Zero on success, a non-zero error code on error.
   ///
-  virtual int Delete(const std::string &table, const std::string &key) = 0;
+  virtual seastar::future<int> Delete(const std::string &table, const std::string &key) = 0;
 
   virtual ~DB() {}
 };

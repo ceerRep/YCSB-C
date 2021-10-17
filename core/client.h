@@ -14,14 +14,16 @@
 #include "db.h"
 #include "utils.h"
 
+#include <seastar/core/future.hh>
+
 namespace ycsbc {
 
 class Client {
  public:
   Client(DB &db, CoreWorkload &wl) : db_(db), workload_(wl) {}
 
-  virtual bool DoInsert();
-  virtual bool DoTransaction();
+  virtual seastar::future<bool> DoInsert();
+  virtual seastar::future<bool> DoTransaction();
 
   virtual ~Client() {}
 
@@ -37,14 +39,14 @@ class Client {
   CoreWorkload &workload_;
 };
 
-inline bool Client::DoInsert() {
+inline seastar::future<bool> Client::DoInsert() {
   std::string key = workload_.NextSequenceKey();
   std::vector<DB::KVPair> pairs;
   workload_.BuildValues(pairs);
-  return (db_.Insert(workload_.NextTable(), key, pairs) == DB::kOK);
+  return seastar::make_ready_future<bool>(db_.Insert(workload_.NextTable(), key, pairs).get() == DB::kOK);
 }
 
-inline bool Client::DoTransaction() {
+inline seastar::future<bool> Client::DoTransaction() {
   int status = -1;
   switch (workload_.NextOperation()) {
     case READ:
@@ -69,7 +71,7 @@ inline bool Client::DoTransaction() {
       throw utils::Exception("Operation request is not recognized!");
   }
   assert(status >= 0);
-  return (status == DB::kOK);
+  return seastar::make_ready_future<bool>(status == DB::kOK);
 }
 
 inline int Client::TransactionRead() {
@@ -79,9 +81,9 @@ inline int Client::TransactionRead() {
   if (!workload_.read_all_fields()) {
     std::vector<std::string> fields;
     fields.push_back("field" + workload_.NextFieldName());
-    return db_.Read(table, key, &fields, result);
+    return db_.Read(table, key, &fields, result).get();
   } else {
-    return db_.Read(table, key, NULL, result);
+    return db_.Read(table, key, NULL, result).get();
   }
 }
 
@@ -93,9 +95,9 @@ inline int Client::TransactionReadModifyWrite() {
   if (!workload_.read_all_fields()) {
     std::vector<std::string> fields;
     fields.push_back("field" + workload_.NextFieldName());
-    db_.Read(table, key, &fields, result);
+    db_.Read(table, key, &fields, result).get();
   } else {
-    db_.Read(table, key, NULL, result);
+    db_.Read(table, key, NULL, result).get();
   }
 
   std::vector<DB::KVPair> values;
@@ -104,7 +106,7 @@ inline int Client::TransactionReadModifyWrite() {
   } else {
     workload_.BuildUpdate(values);
   }
-  return db_.Update(table, key, values);
+  return db_.Update(table, key, values).get();
 }
 
 inline int Client::TransactionScan() {
@@ -115,9 +117,9 @@ inline int Client::TransactionScan() {
   if (!workload_.read_all_fields()) {
     std::vector<std::string> fields;
     fields.push_back("field" + workload_.NextFieldName());
-    return db_.Scan(table, key, len, &fields, result);
+    return db_.Scan(table, key, len, &fields, result).get();
   } else {
-    return db_.Scan(table, key, len, NULL, result);
+    return db_.Scan(table, key, len, NULL, result).get();
   }
 }
 
@@ -130,7 +132,7 @@ inline int Client::TransactionUpdate() {
   } else {
     workload_.BuildUpdate(values);
   }
-  return db_.Update(table, key, values);
+  return db_.Update(table, key, values).get();
 }
 
 inline int Client::TransactionInsert() {
@@ -138,7 +140,7 @@ inline int Client::TransactionInsert() {
   const std::string &key = workload_.NextSequenceKey();
   std::vector<DB::KVPair> values;
   workload_.BuildValues(values);
-  return db_.Insert(table, key, values);
+  return db_.Insert(table, key, values).get();
 }
 
 inline int Client::TransactionMultiRead() {
@@ -149,9 +151,9 @@ inline int Client::TransactionMultiRead() {
   if (!workload_.read_all_fields()) {
     std::vector<std::string> fields;
     fields.push_back("field" + workload_.NextFieldName());
-    return db_.MultiRead(table, keys, &fields, results);
+    return db_.MultiRead(table, keys, &fields, results).get();
   } else {
-    return db_.MultiRead(table, keys, NULL, results);
+    return db_.MultiRead(table, keys, NULL, results).get();
   }
 }
 

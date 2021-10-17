@@ -18,6 +18,11 @@
 #include "core/timer.h"
 #include "core/utils.h"
 
+#include <seastar/core/future.hh>
+#include <seastar/core/seastar.hh>
+#include <seastar/core/smp.hh>
+#include <seastar/core/thread.hh>
+
 using namespace std;
 
 namespace ycsbc {
@@ -25,26 +30,38 @@ void UsageMessage(const char *command);
 bool StrStartWith(const char *str, const char *pre);
 string ParseCommandLine(int argc, const char *argv[], utils::Properties &props);
 
-
 int DelegateClient(ycsbc::DB *db, ycsbc::CoreWorkload *wl, const int num_ops,
-                   bool is_loading, vector<double>* latency) {
+                   bool is_loading, vector<double> *latency) {
   db->Init();
   ycsbc::Client client(*db, *wl);
   utils::Timer<double> timer_us;
   int current_ops;
 
   int oks = 0;
+
+  std::vector<seastar::future<bool>> futs;
+
   for (int i = 0; i < num_ops; ++i) {
     current_ops = 0;
-    timer_us.Start();
-    if (is_loading) {
-      oks += client.DoInsert();
-    } else {
-      oks += client.DoTransaction();
-    }
-    double t = timer_us.End();
-    if (latency) latency->push_back(t);
+
+    // TODO: Do not use seastar::thread here
+    futs.push_back(seastar::async([is_loading, &client, latency]() {
+      bool ret = false;
+      utils::Timer<double> timer_us;
+      timer_us.Start();
+      if (is_loading) {
+        ret = client.DoInsert().get();
+      } else {
+        ret = client.DoTransaction().get();
+      }
+      double t = timer_us.End();
+      if (latency) latency->push_back(t);
+      return ret;
+    }));
   }
+
+  for (auto &fut : futs) oks += fut.get();
+
   db->Close();
   return oks;
 }
@@ -129,7 +146,7 @@ string ParseCommandLine(int argc, const char *argv[],
       }
       props.SetProperty("fieldlength", argv[argindex]);
       argindex++;
-    }else {
+    } else {
       cout << "Unknown option '" << argv[argindex] << "'" << endl;
       exit(0);
     }
@@ -154,7 +171,9 @@ void UsageMessage(const char *command) {
           "specified"
        << endl;
   cout << "   -records record_counts: amount of data to be initialized" << endl;
-  cout << "   -operations operation_counts: amount of operations to be performed" << endl;
+  cout
+      << "   -operations operation_counts: amount of operations to be performed"
+      << endl;
   cout << "   -bs value_size: size of a value" << endl;
   cout << "   --no-init: bypass the initialization of data" << endl;
 }
@@ -166,7 +185,7 @@ inline bool StrStartWith(const char *str, const char *pre) {
 void RunBench(int argc, const char *argv[], DB *db) {
   utils::Properties props;
   string file_name = ParseCommandLine(argc, argv, props);
-  vector<future<int>> actual_ops;
+  vector<seastar::future<int>> actual_ops;
   int total_ops = stoi(props[ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY]);
   int sum = 0;
 
@@ -186,13 +205,16 @@ void RunBench(int argc, const char *argv[], DB *db) {
               << std::endl;
 
     for (int i = 0; i < num_threads; ++i) {
-      actual_ops.emplace_back(async(launch::async, DelegateClient, db, &wl,
-                                    total_ops / num_threads, true, nullptr));
+      actual_ops.emplace_back(seastar::smp::submit_to(
+          i, [db, &wl, ops = total_ops / num_threads]() {
+            return seastar::async([db, &wl, ops]() {
+              return DelegateClient(db, &wl, ops, true, nullptr);
+            });
+          }));
     }
     assert((int)actual_ops.size() == num_threads);
 
     for (auto &n : actual_ops) {
-      assert(n.valid());
       sum += n.get();
     }
     cerr << "# Loading records:\t" << sum << endl;
@@ -207,20 +229,24 @@ void RunBench(int argc, const char *argv[], DB *db) {
   utils::Timer<double> timer;
   timer.Start();
   for (int i = 0; i < num_threads; ++i) {
-    actual_ops.emplace_back(async(launch::async, DelegateClient, db, &wl,
-                                  total_ops / num_threads, false, &thread_latency[i]));
+    actual_ops.emplace_back(seastar::smp::submit_to(
+        i, [db, &wl, ops = total_ops / num_threads, &thread_latency, i]() {
+          return seastar::async([db, &wl, ops, &thread_latency, i]() {
+            return DelegateClient(db, &wl, ops, false, &thread_latency[i]);
+          });
+        }));
   }
   assert((int)actual_ops.size() == num_threads);
 
   sum = 0;
   for (auto &n : actual_ops) {
-    assert(n.valid());
     sum += n.get();
   }
   double duration = timer.End();
 
   for (int t = 0; t < num_threads; t++) {
-    total_latency.insert(total_latency.end(), thread_latency[t].begin(), thread_latency[t].end());
+    total_latency.insert(total_latency.end(), thread_latency[t].begin(),
+                         thread_latency[t].end());
   }
   size_t pos_avg = sum >> 2;
   size_t pos_99 = sum - sum / 100 - 1;
@@ -229,13 +255,18 @@ void RunBench(int argc, const char *argv[], DB *db) {
   cout << "# Transaction throughput (KTPS)" << endl;
   cout << file_name << '\t' << num_threads << '\t';
   cout << total_ops / duration / 1000 << endl;
-  
+
   cout << "# Transaction latency (ms)" << endl;
-  nth_element(total_latency.begin(), total_latency.begin() + pos_avg, total_latency.end());
+  nth_element(total_latency.begin(), total_latency.begin() + pos_avg,
+              total_latency.end());
   cout << "avg latency:\t" << *(total_latency.begin() + pos_avg) * 1000 << endl;
-  nth_element(total_latency.begin(), total_latency.begin() + pos_99, total_latency.end());
-  cout << "99% tail latency:\t" << *(total_latency.begin() + pos_99) * 1000 << endl;
-  nth_element(total_latency.begin(), total_latency.begin() + pos_999, total_latency.end());
-  cout << "99.9% tail latency:\t" << *(total_latency.begin() + pos_999) * 1000 << endl;
+  nth_element(total_latency.begin(), total_latency.begin() + pos_99,
+              total_latency.end());
+  cout << "99% tail latency:\t" << *(total_latency.begin() + pos_99) * 1000
+       << endl;
+  nth_element(total_latency.begin(), total_latency.begin() + pos_999,
+              total_latency.end());
+  cout << "99.9% tail latency:\t" << *(total_latency.begin() + pos_999) * 1000
+       << endl;
 }
 }  // namespace ycsbc
