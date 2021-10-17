@@ -39,28 +39,35 @@ int DelegateClient(ycsbc::DB *db, ycsbc::CoreWorkload *wl, const int num_ops,
 
   int oks = 0;
 
-  std::vector<seastar::future<bool>> futs;
+  std::vector<seastar::future<std::pair<bool, double>>> futs;
+  std::vector<utils::Timer<double>> timers;
 
   for (int i = 0; i < num_ops; ++i) {
     current_ops = 0;
 
-    // TODO: Do not use seastar::thread here
-    futs.push_back(seastar::async([is_loading, &client, latency]() {
-      bool ret = false;
-      utils::Timer<double> timer_us;
-      timer_us.Start();
-      if (is_loading) {
-        ret = client.DoInsert().get();
-      } else {
-        ret = client.DoTransaction().get();
-      }
-      double t = timer_us.End();
-      if (latency) latency->push_back(t);
-      return ret;
+    timers.push_back({});
+    timers.back().Start();
+
+    seastar::future<bool> fut = seastar::make_ready_future<bool>(false);
+
+    if (is_loading) {
+      fut = client.DoInsert();
+    } else {
+      fut = client.DoTransaction();
+    }
+
+    futs.push_back(fut.then([timer = &timers.back()](bool ret) {
+      double t = timer->End();
+      return std::make_pair(ret, t);
     }));
   }
 
-  for (auto &fut : futs) oks += fut.get();
+  for (auto &fut : futs) {
+    auto [ok, t] = fut.get();
+
+    oks += ok;
+    if (latency) latency->push_back(t);
+  }
 
   db->Close();
   return oks;
