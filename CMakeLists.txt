@@ -14,7 +14,8 @@ set (SOURCE
     core/core_workload.cc
     ycsbc.cc)
 
-add_library(ycsb ${SOURCE})
+
+add_library(ycsb STATIC ${SOURCE})
 target_link_libraries(ycsb Seastar::seastar ${CMAKE_THREAD_LIBS_INIT})
 
 if (YCSB_TEST)

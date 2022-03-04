@@ -19,9 +19,9 @@ namespace ycsbc {
 class DB {
  public:
   typedef std::pair<std::string, std::string> KVPair;
-  static const int kOK = 0;
-  static const int kErrorNoData = 1;
-  static const int kErrorConflict = 2;
+  inline static const int kOK = 0;
+  inline static const int kErrorNoData = 1;
+  inline static const int kErrorConflict = 2;
   ///
   /// Initializes any state for accessing this DB.
   /// Called once per DB client (thread); there is a single DB instance
