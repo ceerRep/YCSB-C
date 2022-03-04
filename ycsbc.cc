@@ -41,33 +41,52 @@ int DelegateClient(ycsbc::DB *db, ycsbc::CoreWorkload *wl, const int num_ops,
 
   std::vector<seastar::future<std::pair<bool, double>>> futs;
   std::vector<utils::Timer<double>> timers;
+  std::vector<int> zeros(num_ops, 0);
 
-  for (int i = 0; i < num_ops; ++i) {
-    current_ops = 0;
-
-    timers.push_back({});
-    timers.back().Start();
+  seastar::max_concurrent_for_each(zeros, 32, [&timers, is_loading, &client, latency, &oks](int) {
+    utils::Timer<double> now;
+    now.Start();
 
     seastar::future<bool> fut = seastar::make_ready_future<bool>(false);
 
     if (is_loading) {
-      fut = client.DoInsert();
+      fut = seastar::async([&client]() { return client.DoInsert().get(); });
     } else {
-      fut = client.DoTransaction();
+      fut = seastar::async([&client]() { return client.DoTransaction().get(); });
     }
 
-    futs.push_back(fut.then([timer = &timers.back()](bool ret) {
-      double t = timer->End();
-      return std::make_pair(ret, t);
-    }));
-  }
+    return fut.then([now, latency, &oks](bool ok) mutable {
+      if (latency) latency->push_back(now.End());
+      oks += ok;
+    });
+  }).get();
 
-  for (auto &fut : futs) {
-    auto [ok, t] = fut.get();
+    // for (int i = 0; i < num_ops; ++i) {
+    //   current_ops = 0;
 
-    oks += ok;
-    if (latency) latency->push_back(t);
-  }
+    //   timers.push_back({});
+    //   timers.back().Start();
+
+    //   seastar::future<bool> fut = seastar::make_ready_future<bool>(false);
+
+    //   if (is_loading) {
+    //     fut = client.DoInsert();
+    //   } else {
+    //     fut = client.DoTransaction();
+    //   }
+
+    //   futs.push_back(fut.then([timer = &timers.back()](bool ret) {
+    //     double t = timer->End();
+    //     return std::make_pair(ret, t);
+    //   }));
+    // }
+
+    // for (auto &fut : futs) {
+    //   auto [ok, t] = fut.get();
+
+    //   oks += ok;
+    //   if (latency) latency->push_back(t);
+    // }
 
   db->Close();
   return oks;
