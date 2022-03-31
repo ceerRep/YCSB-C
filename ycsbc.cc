@@ -31,7 +31,7 @@ bool StrStartWith(const char *str, const char *pre);
 string ParseCommandLine(int argc, const char *argv[], utils::Properties &props);
 
 int DelegateClient(ycsbc::DB *db, ycsbc::CoreWorkload *wl, const int num_ops,
-                   bool is_loading, vector<double> *latency) {
+                   bool is_loading, vector<double> *latency, int id) {
   db->Init();
   ycsbc::Client client(*db, *wl);
   utils::Timer<double> timer_us;
@@ -43,16 +43,16 @@ int DelegateClient(ycsbc::DB *db, ycsbc::CoreWorkload *wl, const int num_ops,
   std::vector<utils::Timer<double>> timers;
   std::vector<int> zeros(num_ops, 0);
 
-  seastar::max_concurrent_for_each(zeros, 32, [&timers, is_loading, &client, latency, &oks](int) {
+  seastar::max_concurrent_for_each(zeros, 1, [&timers, is_loading, &client, latency, &oks, id](int) {
     utils::Timer<double> now;
     now.Start();
 
     seastar::future<bool> fut = seastar::make_ready_future<bool>(false);
 
     if (is_loading) {
-      fut = seastar::async([&client]() { return client.DoInsert().get(); });
+      fut = seastar::async([&client, id]() { return client.DoInsert(id).get(); });
     } else {
-      fut = seastar::async([&client]() { return client.DoTransaction().get(); });
+      fut = seastar::async([&client, id]() { return client.DoTransaction(id).get(); });
     }
 
     return fut.then([now, latency, &oks](bool ok) mutable {
@@ -225,6 +225,9 @@ void RunBench(int argc, const char *argv[], DB *db) {
   vector<double> total_latency;
   total_latency.reserve(total_ops);
   vector<vector<double>> thread_latency(num_threads);
+
+  int all_cpus = seastar::smp::all_cpus().size();
+
   if (init_data) {  // Loads data
     std::cout << "=============================== Load Data "
                  "==============================="
@@ -232,9 +235,9 @@ void RunBench(int argc, const char *argv[], DB *db) {
 
     for (int i = 0; i < num_threads; ++i) {
       actual_ops.emplace_back(seastar::smp::submit_to(
-          i, [db, &wl, ops = total_ops / num_threads]() {
-            return seastar::async([db, &wl, ops]() {
-              return DelegateClient(db, &wl, ops, true, nullptr);
+          i % all_cpus, [db, &wl, ops = total_ops / num_threads, i]() {
+            return seastar::async([db, &wl, ops, i]() {
+              return DelegateClient(db, &wl, ops, true, nullptr, i);
             });
           }));
     }
@@ -256,9 +259,9 @@ void RunBench(int argc, const char *argv[], DB *db) {
   timer.Start();
   for (int i = 0; i < num_threads; ++i) {
     actual_ops.emplace_back(seastar::smp::submit_to(
-        i, [db, &wl, ops = total_ops / num_threads, &thread_latency, i]() {
+        i % all_cpus, [db, &wl, ops = total_ops / num_threads, &thread_latency, i]() {
           return seastar::async([db, &wl, ops, &thread_latency, i]() {
-            return DelegateClient(db, &wl, ops, false, &thread_latency[i]);
+            return DelegateClient(db, &wl, ops, false, &thread_latency[i], i);
           });
         }));
   }

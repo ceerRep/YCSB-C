@@ -9,6 +9,7 @@
 #ifndef YCSB_C_CORE_WORKLOAD_H_
 #define YCSB_C_CORE_WORKLOAD_H_
 
+#include <seastar/core/smp.hh>
 #include <string>
 #include <vector>
 #include "counter_generator.h"
@@ -144,8 +145,12 @@ class CoreWorkload {
   virtual void BuildUpdate(std::vector<ycsbc::DB::KVPair> &update);
 
   virtual std::string NextTable() { return table_name_; }
-  virtual std::string NextSequenceKey();     /// Used for loading data
-  virtual std::string NextTransactionKey();  /// Used for transactions
+  virtual std::string NextSequenceKey0();     /// Used for loading data
+  virtual std::string NextTransactionKey0();  /// Used for transactions
+  
+  virtual std::string NextSequenceKey(int id);     /// Used for loading data
+  virtual std::string NextTransactionKey(int id);  /// Used for transactions
+
   virtual std::vector<std::string> NextTransactionMultiKey(int len);
   virtual Operation NextOperation() { return op_chooser_.Next(); }
   virtual std::string NextFieldName();
@@ -192,17 +197,40 @@ class CoreWorkload {
   CounterGenerator insert_key_sequence_;
   bool ordered_inserts_;
   size_t record_count_;
+
+  std::vector<ycsbc::DB::KVPair> pair_values;
+
+  std::vector<std::vector<std::string>> seq_keys;
+  std::vector<int> seq_keys_cursor;
+  std::vector<std::vector<std::string>> txn_keys;
+  std::vector<int> txn_keys_cursor;
 };
 
-inline std::string CoreWorkload::NextSequenceKey() {
+inline std::string CoreWorkload::NextSequenceKey0() {
   uint64_t key_num = key_generator_->Next();
   return BuildKeyName(key_num);
 }
 
-inline std::string CoreWorkload::NextTransactionKey() {
+inline std::string CoreWorkload::NextTransactionKey0() {
   uint64_t key_num;
   key_num = key_chooser_->Next();
   return BuildKeyName(key_num);
+}
+
+inline std::string CoreWorkload::NextSequenceKey(int id) {
+  if (seq_keys_cursor[id] >= seq_keys[id].size()) {
+    seq_keys_cursor[id] = 0;
+    std::cerr << "not enough seq key" << std::endl;
+  }
+  return seq_keys[id][seq_keys_cursor[id]++];
+}
+
+inline std::string CoreWorkload::NextTransactionKey(int id) {
+  if (txn_keys_cursor[id] >= txn_keys[id].size()) {
+    txn_keys_cursor[id] = 0;
+    std::cerr << "not enough txn key" << std::endl;
+  }
+  return txn_keys[id][txn_keys_cursor[id]++];
 }
 
 inline std::vector<std::string> CoreWorkload::NextTransactionMultiKey(int len) {

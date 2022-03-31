@@ -173,6 +173,36 @@ void CoreWorkload::Init(const utils::Properties &p) {
     throw utils::Exception("Distribution not allowed for scan length: " +
                            scan_len_dist);
   }
+
+  std::cout << "Generating keys..." << std::endl;
+  int total_ops = stoi(p[ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY]);
+  const int num_threads = stoi(p.GetProperty("threadcount", "1"));
+
+  for (int i = 0; i < num_threads; i++)
+  {
+    seq_keys.emplace_back();
+    for (int i = 0; i < total_ops / num_threads; i++)
+      seq_keys.back().push_back(NextSequenceKey0());
+    seq_keys_cursor.push_back(0);
+  }
+
+  for (int i = 0; i < num_threads; i++)
+  {
+    txn_keys.emplace_back();
+    for (int i = 0; i < total_ops / num_threads; i++)
+      txn_keys.back().push_back(NextTransactionKey0());
+    txn_keys_cursor.push_back(0);
+  }
+
+  for (int i = 0; i < field_count_; ++i) {
+    ycsbc::DB::KVPair pair;
+    pair.first.append("field").append(std::to_string(i));
+    pair.second.append(field_len_generator_->Next(), utils::RandomPrintChar());
+    pair_values.push_back(pair);
+  }
+
+  std::cout << "Keys generated..." << std::endl;
+
 }
 
 ycsbc::Generator<uint64_t> *CoreWorkload::GetFieldLenGenerator(
@@ -194,17 +224,11 @@ ycsbc::Generator<uint64_t> *CoreWorkload::GetFieldLenGenerator(
 }
 
 void CoreWorkload::BuildValues(std::vector<ycsbc::DB::KVPair> &values) {
-  for (int i = 0; i < field_count_; ++i) {
-    ycsbc::DB::KVPair pair;
-    pair.first.append("field").append(std::to_string(i));
-    pair.second.append(field_len_generator_->Next(), utils::RandomPrintChar());
-    values.push_back(pair);
-  }
+  values = pair_values;
 }
 
 void CoreWorkload::BuildUpdate(std::vector<ycsbc::DB::KVPair> &update) {
-  ycsbc::DB::KVPair pair;
-  pair.first.append(NextFieldName());
-  pair.second.append(field_len_generator_->Next(), utils::RandomPrintChar());
-  update.push_back(pair);
+  thread_local static int now = 0;
+  update.push_back(pair_values[now]);
+  now = (now + 1) % field_count_;
 }
